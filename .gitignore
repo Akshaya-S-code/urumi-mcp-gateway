@@ -1,0 +1,31 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+!.env.*.example
+secrets/
+*.log
+coverage/
+
+# Temporary WooCommerce diagnostic scripts
+/woo-api-local-test.php
+/woo-auth-check.php
+/woo-auth-methods.php
+/woo-key-check.php
+/woo-key-details.php
+/woo-key-match.php
+/woo-secret-check.php
+/woo-user-check.php
+
+# Gateway database and SQLite files
+services/gateway/data/*.sqlite
+services/gateway/data/*.sqlite-*
+
+# Local Gateway test artifacts
+
+# Local backups and generated data
+*.backup
+*.backup-*
+*.before-*
+*.pre-*
