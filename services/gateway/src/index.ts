@@ -1,3 +1,4 @@
+import cors from "cors";
 import "dotenv/config";
 import express from "express";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -15,9 +16,22 @@ import {
   recordAuditEvent,
   type ApiRole,
 } from "./database.js";
+import {
+  addUpstream,
+  listUpstreams,
+  removeUpstream,
+  seedUpstreams,
+  updateUpstream,
+} from "./upstreams.js";
 
 const app = express();
 app.disable("x-powered-by");
+
+app.use(cors({
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT ?? 3002);
@@ -138,6 +152,83 @@ app.get("/admin/audit-logs", (req, res) => {
   res.json(listAuditEvents(Number.isFinite(parsedLimit) ? parsedLimit : 100));
 });
 
+function requireAdmin(req: express.Request, res: express.Response): boolean {
+  const match = /^Bearer (.+)$/.exec(req.header("Authorization") ?? "");
+  const identity = match ? authenticateApiKey(match[1]) : null;
+  if (!identity || identity.role !== "admin") {
+    res.status(403).json({ error: "Admin access required" });
+    return false;
+  }
+  return true;
+}
+
+function validateUpstream(name: unknown, url: unknown): string | null {
+  if (typeof name !== "string" || !/^[a-z][a-z0-9_-]{1,39}$/.test(name)) {
+    return "Name must be 2–40 lowercase letters, numbers, underscores or hyphens, starting with a letter.";
+  }
+  if (typeof url !== "string" || url.length > 2048) return "A valid upstream URL is required.";
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "URL must use HTTP or HTTPS.";
+    if (parsed.username || parsed.password) return "Credentials must not be embedded in the URL.";
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1") {
+      // Local MCP services are intentionally supported for this development setup.
+    }
+    return null;
+  } catch {
+    return "Invalid upstream URL.";
+  }
+}
+
+seedUpstreams([
+  { name: "woo", url: process.env.WOO_MCP_URL ?? "http://127.0.0.1:3001/mcp" },
+  { name: "analytics", url: process.env.ANALYTICS_MCP_URL ?? "http://127.0.0.1:3003/mcp" },
+  { name: "inventory", url: process.env.INVENTORY_MCP_URL ?? "http://127.0.0.1:3004/mcp" },
+]);
+
+app.get("/admin/upstreams", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json(listUpstreams());
+});
+
+app.post("/admin/upstreams", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { name, url } = req.body ?? {};
+  const error = validateUpstream(name, url);
+  if (error) { res.status(400).json({ error }); return; }
+  try {
+    res.status(201).json(addUpstream(name, url));
+  } catch {
+    res.status(409).json({ error: "An upstream with that name already exists." });
+  }
+});
+
+app.patch("/admin/upstreams/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const current = listUpstreams().find((item) => item.id === req.params.id);
+  if (!current) { res.status(404).json({ error: "Upstream not found." }); return; }
+  const { name = current.name, url = current.url, enabled = current.enabled } = req.body ?? {};
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled must be true or false." });
+    return;
+  }
+  const error = validateUpstream(name, url);
+  if (error) { res.status(400).json({ error }); return; }
+  try {
+    res.json(updateUpstream(req.params.id, { name, url, enabled }));
+  } catch {
+    res.status(409).json({ error: "An upstream with that name already exists." });
+  }
+});
+
+app.delete("/admin/upstreams/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!removeUpstream(req.params.id)) {
+    res.status(404).json({ error: "Upstream not found." });
+    return;
+  }
+  res.json({ removed: true });
+});
 app.post("/mcp", async (req, res) => {
   const authReq = req as AuthenticatedRequest;
   const keyId = authReq.apiKeyId ?? null;
@@ -157,7 +248,7 @@ app.post("/mcp", async (req, res) => {
   });
 
   try {
-    for (const upstreamConfig of UPSTREAMS) {
+    for (const upstreamConfig of listUpstreams().filter((item) => item.enabled)) {
       const client = new Client({
         name: `urumi-gateway-${upstreamConfig.name}-client`,
         version: "1.0.0",
@@ -324,11 +415,11 @@ app.post("/mcp", async (req, res) => {
       },
       async () => {
         const startedAt = Date.now();
-        const result = UPSTREAMS.map((configured) => {
+        const result = listUpstreams().map((configured) => {
           const connected = clients.find((item) => item.name === configured.name);
           return {
             name: configured.name,
-            status: connected ? "connected" : "unavailable",
+            status: !configured.enabled ? "disabled" : connected ? "connected" : "unavailable",
             tools: connected
               ? connected.tools.map((tool) => ({
                   name: `${connected.name}__${tool.name}`,
@@ -380,6 +471,3 @@ app.listen(PORT, "127.0.0.1", () => {
   console.log(`Urumi Gateway listening on port ${PORT}`);
   console.log(`Configured MCP upstreams: ${UPSTREAMS.map((item) => item.name).join(", ")}`);
 });
-
-
-
