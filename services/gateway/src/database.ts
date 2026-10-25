@@ -5,10 +5,12 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dataDirectory = path.resolve(here, "../data");
-const databasePath = path.join(dataDirectory, "gateway.sqlite");
+const databasePath = process.env.GATEWAY_DATABASE_PATH
+  ? path.resolve(process.env.GATEWAY_DATABASE_PATH)
+  : path.join(dataDirectory, "gateway.sqlite");
 
 import fs from "node:fs";
-fs.mkdirSync(dataDirectory, { recursive: true });
+fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
 const db = new Database(databasePath);
 db.pragma("journal_mode = WAL");
@@ -27,7 +29,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key_id TEXT,
+    key_label TEXT,
     role TEXT,
+    server_name TEXT,
     tool_name TEXT,
     occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     duration_ms INTEGER,
@@ -35,6 +39,13 @@ db.exec(`
     FOREIGN KEY (key_id) REFERENCES api_keys(id)
   );
 `);
+
+// Keep existing SQLite volumes usable when this service is upgraded in place.
+const auditColumns = new Set(
+  (db.pragma("table_info(audit_logs)") as Array<{ name: string }>).map((column) => column.name),
+);
+if (!auditColumns.has("key_label")) db.exec("ALTER TABLE audit_logs ADD COLUMN key_label TEXT");
+if (!auditColumns.has("server_name")) db.exec("ALTER TABLE audit_logs ADD COLUMN server_name TEXT");
 
 export type ApiRole = "admin" | "member";
 
@@ -114,18 +125,22 @@ export function listApiKeys(): ApiKeyRecord[] {
 
 export function recordAuditEvent(event: {
   keyId: string | null;
+  keyLabel: string | null;
   role: ApiRole | null;
+  serverName: string;
   toolName: string;
   durationMs: number;
   outcome: "success" | "error" | "denied";
 }): void {
   db.prepare(`
     INSERT INTO audit_logs
-      (key_id, role, tool_name, duration_ms, outcome)
-    VALUES (?, ?, ?, ?, ?)
+      (key_id, key_label, role, server_name, tool_name, duration_ms, outcome)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     event.keyId,
+    event.keyLabel,
     event.role,
+    event.serverName,
     event.toolName,
     event.durationMs,
     event.outcome,
@@ -135,11 +150,15 @@ export function recordAuditEvent(event: {
 export function listAuditEvents(limit = 100) {
   const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
   return db.prepare(`
-    SELECT id, key_id, role, tool_name, occurred_at, duration_ms, outcome
+    SELECT id, key_id, key_label, role, server_name, tool_name, occurred_at, duration_ms, outcome
     FROM audit_logs
     ORDER BY id DESC
     LIMIT ?
   `).all(safeLimit);
+}
+
+export function closeDatabase(): void {
+  db.close();
 }
 
 export function importExistingAdminKey(rawKey: string): void {
@@ -149,9 +168,11 @@ export function importExistingAdminKey(rawKey: string): void {
 
   const existing = db.prepare(`
     SELECT id FROM api_keys WHERE key_hash = ?
-  `).get(hashKey(rawKey));
+  `).get(hashKey(rawKey)) as { id: string } | undefined;
 
   if (existing) {
+    // Revocation is durable across restarts. The configured bootstrap secret
+    // may seed a missing database, but must never resurrect a revoked key.
     return;
   }
 

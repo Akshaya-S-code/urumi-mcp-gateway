@@ -27,5 +27,11 @@ services/gateway/data/*.sqlite-*
 # Local backups and generated data
 *.backup
 *.backup-*
+*backup-*
 *.before-*
 *.pre-*
+*.k8s-backup-*
+*.recovery-*
+*.syntax-backup-*
+*.final-backup-*
+gateway-build-error.txt

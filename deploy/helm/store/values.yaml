@@ -30,3 +30,8 @@ secrets:
   rootPasswordKey: mariadb-root-password
   databasePasswordKey: mariadb-password
 
+ingress:
+  enabled: false
+  className: nginx
+  host: store.urumi.local
+

@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHmac } from "node:crypto";
@@ -18,6 +18,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.ANALYTICS_PORT ?? 3003);
 const STORE_URL = process.env.WOOCOMMERCE_URL;
+const STORE_CONNECT_URL = process.env.WOOCOMMERCE_CONNECT_URL;
 const CONSUMER_KEY = process.env.WOOCOMMERCE_CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.WOOCOMMERCE_CONSUMER_SECRET;
 
@@ -28,14 +29,16 @@ function getWooCredentials() {
 
   return {
     storeUrl: STORE_URL.replace(/\/+$/, ""),
+    connectUrl: (STORE_CONNECT_URL || STORE_URL).replace(/\/+$/, ""),
     consumerKey: CONSUMER_KEY.trim(),
     consumerSecret: CONSUMER_SECRET.trim(),
   };
 }
 
 async function fetchOrders(after?: string, before?: string) {
-  const { storeUrl, consumerKey, consumerSecret } = getWooCredentials();
-  const url = new URL(storeUrl);
+  const { storeUrl, connectUrl, consumerKey, consumerSecret } = getWooCredentials();
+  const canonicalUrl = new URL(storeUrl);
+  const url = new URL(connectUrl);
   url.searchParams.set("rest_route", "/wc/v3/orders");
   url.searchParams.set("per_page", "100");
   if (after) url.searchParams.set("after", after);
@@ -64,7 +67,11 @@ async function fetchOrders(after?: string, before?: string) {
   }
 
   const response = await fetch(url, {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      Host: canonicalUrl.host,
+      "X-Forwarded-Proto": canonicalUrl.protocol.slice(0, -1),
+    },
     signal: AbortSignal.timeout(15000),
   });
 
@@ -81,12 +88,13 @@ async function fetchOrders(after?: string, before?: string) {
   }>;
 }
 
-const appServer = new McpServer({
-  name: "urumi-analytics-mcp",
-  version: "1.0.0",
-});
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "urumi-analytics-mcp",
+    version: "1.0.0",
+  });
 
-appServer.registerTool(
+  server.registerTool(
   "get_sales_summary",
   {
     description: "Summarize WooCommerce orders and sales for an optional date range. Reads up to 100 matching orders.",
@@ -130,13 +138,17 @@ appServer.registerTool(
       };
     }
   },
-);
+  );
+
+  return server;
+}
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "urumi-analytics-mcp" });
 });
 
 app.post("/mcp", async (req, res) => {
+  const server = createMcpServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
@@ -144,12 +156,18 @@ app.post("/mcp", async (req, res) => {
 
   res.on("close", () => {
     void transport.close().catch(() => undefined);
+    void server.close().catch(() => undefined);
   });
 
-  await appServer.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error("Analytics MCP request failed:", error instanceof Error ? error.message : "Unknown error");
+    if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Analytics MCP server listening on port ${PORT}`);
 });

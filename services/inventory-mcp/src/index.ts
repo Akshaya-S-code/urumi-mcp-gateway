@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHmac } from "node:crypto";
@@ -18,6 +18,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.INVENTORY_PORT ?? 3004);
 const STORE_URL = process.env.WOOCOMMERCE_URL;
+const STORE_CONNECT_URL = process.env.WOOCOMMERCE_CONNECT_URL;
 const CONSUMER_KEY = process.env.WOOCOMMERCE_CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.WOOCOMMERCE_CONSUMER_SECRET;
 
@@ -37,7 +38,9 @@ async function fetchProducts(limit: number): Promise<WooProduct[]> {
   }
 
   const storeUrl = STORE_URL.replace(/\/+$/, "");
-  const url = new URL(storeUrl);
+  const connectUrl = (STORE_CONNECT_URL || STORE_URL).replace(/\/+$/, "");
+  const canonicalUrl = new URL(storeUrl);
+  const url = new URL(connectUrl);
   url.searchParams.set("rest_route", "/wc/v3/products");
   url.searchParams.set("per_page", String(limit));
 
@@ -66,7 +69,11 @@ async function fetchProducts(limit: number): Promise<WooProduct[]> {
   }
 
   const response = await fetch(url, {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      Host: canonicalUrl.host,
+      "X-Forwarded-Proto": canonicalUrl.protocol.slice(0, -1),
+    },
     signal: AbortSignal.timeout(15000),
   });
 
@@ -77,12 +84,13 @@ async function fetchProducts(limit: number): Promise<WooProduct[]> {
   return await response.json() as WooProduct[];
 }
 
-const server = new McpServer({
-  name: "urumi-inventory-mcp",
-  version: "1.0.0",
-});
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "urumi-inventory-mcp",
+    version: "1.0.0",
+  });
 
-server.registerTool(
+  server.registerTool(
   "get_stock",
   {
     description: "Look up stock status and quantity for a WooCommerce product by ID.",
@@ -128,9 +136,9 @@ server.registerTool(
       };
     }
   },
-);
+  );
 
-server.registerTool(
+  server.registerTool(
   "get_low_stock_products",
   {
     description: "List managed-stock WooCommerce products whose quantity is at or below the specified threshold.",
@@ -176,13 +184,17 @@ server.registerTool(
       };
     }
   },
-);
+  );
+
+  return server;
+}
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "urumi-inventory-mcp" });
 });
 
 app.post("/mcp", async (req, res) => {
+  const requestServer = createMcpServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
@@ -190,12 +202,18 @@ app.post("/mcp", async (req, res) => {
 
   res.on("close", () => {
     void transport.close().catch(() => undefined);
+    void requestServer.close().catch(() => undefined);
   });
 
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  try {
+    await requestServer.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error("Inventory MCP request failed:", error instanceof Error ? error.message : "Unknown error");
+    if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Inventory MCP server listening on port ${PORT}`);
 });

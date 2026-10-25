@@ -9,3 +9,6 @@ spec:
   resources:
     requests:
       storage: {{ .Values.wordpress.storage.size }}
+  {{- with .Values.wordpress.storage.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}

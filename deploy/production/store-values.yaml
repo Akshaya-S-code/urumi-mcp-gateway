@@ -1,0 +1,23 @@
+namespace: urumi-store
+wordpress:
+  replicaCount: 1
+  image:
+    repository: registry.example.com/urumi/wordpress-woocommerce
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  service: { type: ClusterIP, port: 80 }
+  storage: { size: 10Gi, accessMode: ReadWriteOnce, storageClassName: local-path }
+mariadb:
+  image: { repository: mariadb, tag: "11.4", pullPolicy: IfNotPresent }
+  database: woocommerce
+  username: wooapp
+  storage: { size: 10Gi, accessMode: ReadWriteOnce, storageClassName: local-path }
+secrets:
+  existingSecret: urumi-store-db
+  rootPasswordKey: mariadb-root-password
+  databasePasswordKey: mariadb-password
+ingress:
+  enabled: true
+  className: traefik
+  host: store.example.com
+  tlsSecret: urumi-store-tls

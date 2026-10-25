@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHmac } from "node:crypto";
@@ -17,6 +17,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT ?? 3001);
 const STORE_URL = process.env.WOOCOMMERCE_URL;
+const STORE_CONNECT_URL = process.env.WOOCOMMERCE_CONNECT_URL;
 const CONSUMER_KEY = process.env.WOOCOMMERCE_CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.WOOCOMMERCE_CONSUMER_SECRET;
 
@@ -26,6 +27,7 @@ function getWooCredentials() {
   }
   return {
     storeUrl: STORE_URL.replace(/\/+$/, ""),
+    connectUrl: (STORE_CONNECT_URL || STORE_URL).replace(/\/+$/, ""),
     consumerKey: CONSUMER_KEY.trim(),
     consumerSecret: CONSUMER_SECRET.trim(),
   };
@@ -37,8 +39,9 @@ async function wooRequest(
   params: Record<string, string> = {},
   payload?: Record<string, unknown>,
 ) {
-  const { storeUrl, consumerKey, consumerSecret } = getWooCredentials();
-  const url = new URL(storeUrl);
+  const { storeUrl, connectUrl, consumerKey, consumerSecret } = getWooCredentials();
+  const canonicalUrl = new URL(storeUrl);
+  const url = new URL(connectUrl);
   const restRoute = `/wc/v3/${resource}`;
   url.searchParams.set("rest_route", restRoute);
 
@@ -71,6 +74,8 @@ async function wooRequest(
     method,
     headers: {
       Accept: "application/json",
+      Host: canonicalUrl.host,
+      "X-Forwarded-Proto": canonicalUrl.protocol.slice(0, -1),
       ...(payload ? { "Content-Type": "application/json" } : {}),
     },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
@@ -138,12 +143,16 @@ function registerTools(server: McpServer) {
       inputSchema: {
         limit: z.number().int().min(1).max(100).default(10),
         status: z.string().optional(),
+        after: z.string().datetime({ offset: true }).optional(),
+        before: z.string().datetime({ offset: true }).optional(),
       },
     },
-    async ({ limit, status }) => {
+    async ({ limit, status, after, before }) => {
       const orders = await wooRequest("orders", "GET", {
         per_page: String(limit),
         ...(status ? { status } : {}),
+        ...(after ? { after } : {}),
+        ...(before ? { before } : {}),
       });
       return { content: [{ type: "text", text: JSON.stringify(orders, null, 2) }] };
     },
@@ -210,6 +219,6 @@ app.post("/mcp", async (req, res) => {
   }
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`WooCommerce MCP server listening on port ${PORT}`);
 });

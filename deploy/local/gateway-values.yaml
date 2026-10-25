@@ -1,0 +1,78 @@
+﻿replicaCount: 1
+image:
+  repository: urumi-gateway
+  tag: local
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 3002
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: gateway.urumi.local
+      paths:
+        - path: /
+          pathType: Prefix
+env:
+  - name: PORT
+    value: "3002"
+  - name: CORS_ORIGINS
+    value: "http://dashboard.urumi.local,http://dashboard.urumi.local:8080"
+  - name: WOO_MCP_URL
+    value: "http://urumi-woo-mcp-platform:3001/mcp"
+  - name: ANALYTICS_MCP_URL
+    value: "http://urumi-analytics-mcp-platform:3003/mcp"
+  - name: INVENTORY_MCP_URL
+    value: "http://urumi-inventory-mcp-platform:3004/mcp"
+  - name: URUMI_GATEWAY_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: urumi-app-secrets
+        key: URUMI_GATEWAY_API_KEY
+  - name: OLLAMA_BASE_URL
+    value: "http://host.docker.internal:11434"
+  - name: OLLAMA_MODEL
+    value: "qwen2.5:3b"
+  - name: UPSTREAM_TIMEOUT_MS
+    value: "8000"
+  - name: UPSTREAM_ALLOWED_HOSTS
+    value: "urumi-woo-mcp-platform,urumi-analytics-mcp-platform,urumi-inventory-mcp-platform"
+  - name: CHAT_TIMEOUT_MS
+    value: "60000"
+  - name: UPSTREAM_CREDENTIALS_ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: urumi-app-secrets
+        key: UPSTREAM_CREDENTIALS_ENCRYPTION_KEY
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 20
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+volumeMounts:
+  - name: gateway-data
+    mountPath: /app/services/gateway/data
+volumes:
+  - name: gateway-data
+    persistentVolumeClaim:
+      claimName: urumi-gateway-data
+persistence:
+  enabled: true
+  existingClaim: urumi-gateway-data
+  size: 1Gi
+  accessMode: ReadWriteOnce

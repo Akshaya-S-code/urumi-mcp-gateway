@@ -9,3 +9,6 @@ spec:
   resources:
     requests:
       storage: {{ .Values.mariadb.storage.size }}
+  {{- with .Values.mariadb.storage.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}

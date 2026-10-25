@@ -1,0 +1,15 @@
+service:
+  spec:
+    type: NodePort
+ports:
+  web:
+    nodePort: 30000
+  websecure:
+    nodePort: 30001
+providers:
+  kubernetesIngress:
+    enabled: true
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+  name: traefik

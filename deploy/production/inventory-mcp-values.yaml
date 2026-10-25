@@ -1,0 +1,34 @@
+replicaCount: 1
+image:
+  repository: registry.example.com/urumi/inventory-mcp
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 3004
+env:
+  - name: INVENTORY_PORT
+    value: "3004"
+  - name: WOOCOMMERCE_URL
+    value: "https://store.example.com"
+  - name: WOOCOMMERCE_CONNECT_URL
+    value: "http://wordpress.urumi-store.svc.cluster.local"
+  - name: WOOCOMMERCE_CONSUMER_KEY
+    valueFrom: { secretKeyRef: { name: urumi-app-secrets, key: WOOCOMMERCE_CONSUMER_KEY } }
+  - name: WOOCOMMERCE_CONSUMER_SECRET
+    valueFrom: { secretKeyRef: { name: urumi-app-secrets, key: WOOCOMMERCE_CONSUMER_SECRET } }
+livenessProbe:
+  httpGet: { path: /health, port: http }
+  initialDelaySeconds: 20
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /health, port: http }
+  initialDelaySeconds: 10
+  periodSeconds: 5
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: "1", memory: 512Mi }
+networkPolicy:
+  enabled: true
+  allowedFromLabels:
+    app.kubernetes.io/instance: urumi-gateway

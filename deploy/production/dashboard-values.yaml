@@ -1,0 +1,30 @@
+replicaCount: 2
+image:
+  repository: registry.example.com/urumi/dashboard
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: dashboard.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: urumi-tls
+      hosts: [dashboard.example.com]
+livenessProbe:
+  httpGet: { path: /, port: http }
+  initialDelaySeconds: 10
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /, port: http }
+  initialDelaySeconds: 5
+  periodSeconds: 5
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { cpu: 500m, memory: 256Mi }

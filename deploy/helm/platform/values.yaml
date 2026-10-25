@@ -24,7 +24,7 @@ serviceAccount:
   # Specifies whether a service account should be created.
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # Annotations to add to the service account.
   annotations: {}
   # The name of the service account to use.
@@ -159,3 +159,16 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+persistence:
+  enabled: false
+  # Create a PVC only when the chart owns it. Set false to mount a pre-existing claim.
+  createClaim: true
+  existingClaim: ""
+  size: 1Gi
+  accessMode: ReadWriteOnce
+  storageClassName: ""
+
+networkPolicy:
+  enabled: false
+  allowedFromLabels: {}

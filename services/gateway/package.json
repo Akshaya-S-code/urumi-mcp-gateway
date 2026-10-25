@@ -1,22 +1,25 @@
-﻿{
-    "name":  "@urumi/gateway",
-    "version":  "1.0.0",
-    "private":  true,
-    "type":  "module",
-    "scripts":  {
-                    "dev":  "tsx watch src/index.ts",
-                    "build":  "tsc --noEmit",
-                    "typecheck":  "tsc --noEmit",
-                    "start":  "tsx src/index.ts",
-                    "test":  "node --import tsx --test src/database.test.ts"
-                },
-    "dependencies":  {
-                         "@modelcontextprotocol/sdk":  "^1.32.1",
-                         "better-sqlite3":  "^13.0.3",
-                         "express":  "^5.3.0",
-                         "zod":  "^4.6.7"
-                     },
-    "devDependencies":  {
-                            "@types/better-sqlite3":  "^9.6.0"
-                        }
+{
+    "name": "@urumi/gateway",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc --noEmit",
+        "typecheck": "tsc --noEmit",
+        "start": "tsx src/index.ts",
+        "test": "node --import tsx --test src/database.test.ts"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.32.1",
+        "better-sqlite3": "^13.0.3",
+        "cors": "^2.8.6",
+        "express": "^5.3.0",
+        "openai": "^7.42.0",
+        "zod": "^4.6.7"
+    },
+    "devDependencies": {
+        "@types/better-sqlite3": "^9.6.0",
+        "@types/cors": "^2.8.19"
+    }
 }

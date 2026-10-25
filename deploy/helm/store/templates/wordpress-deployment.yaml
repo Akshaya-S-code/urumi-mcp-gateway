@@ -32,20 +32,35 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.databasePasswordKey }}
+            - name: WORDPRESS_CONFIG_EXTRA
+              value: |
+                if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && 'https' === $_SERVER['HTTP_X_FORWARDED_PROTO']) { $_SERVER['HTTPS'] = 'on'; }
           volumeMounts:
             - name: wordpress-data
               mountPath: /var/www/html
           readinessProbe:
             httpGet:
-              path: /
+              path: /wp-login.php
               port: http
-              httpHeaders:
-                - name: Host
-                  value: localhost:8081
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 12  
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
       volumes:
         - name: wordpress-data
           persistentVolumeClaim:
