@@ -9,6 +9,8 @@ service:
 env:
   - name: PORT
     value: "3001"
+  - name: WOO_REQUEST_TIMEOUT_MS
+    value: "30000"
   - name: WOOCOMMERCE_URL
     value: "http://store.urumi.local"
   - name: WOOCOMMERCE_CONNECT_URL

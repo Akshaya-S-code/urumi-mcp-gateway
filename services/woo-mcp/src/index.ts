@@ -16,6 +16,7 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT ?? 3001);
+const WOO_REQUEST_TIMEOUT_MS = Number(process.env.WOO_REQUEST_TIMEOUT_MS ?? 30000);
 const STORE_URL = process.env.WOOCOMMERCE_URL;
 const STORE_CONNECT_URL = process.env.WOOCOMMERCE_CONNECT_URL;
 const CONSUMER_KEY = process.env.WOOCOMMERCE_CONSUMER_KEY;
@@ -79,7 +80,7 @@ async function wooRequest(
       ...(payload ? { "Content-Type": "application/json" } : {}),
     },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(WOO_REQUEST_TIMEOUT_MS),
   });
 
   const responseText = await response.text();

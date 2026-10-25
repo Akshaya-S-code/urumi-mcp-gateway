@@ -36,6 +36,8 @@ env:
     value: "qwen2.5:3b"
   - name: UPSTREAM_TIMEOUT_MS
     value: "8000"
+  - name: TOOL_CALL_TIMEOUT_MS
+    value: "45000"
   - name: UPSTREAM_ALLOWED_HOSTS
     value: "urumi-woo-mcp-platform,urumi-analytics-mcp-platform,urumi-inventory-mcp-platform"
   - name: CHAT_TIMEOUT_MS
