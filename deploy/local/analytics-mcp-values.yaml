@@ -10,7 +10,7 @@ env:
   - name: ANALYTICS_PORT
     value: "3003"
   - name: WOOCOMMERCE_URL
-    value: "http://store.urumi.local"
+    value: "http://localhost:8081"
   - name: WOOCOMMERCE_CONNECT_URL
     value: "http://wordpress.urumi-store.svc.cluster.local"
   - name: WOOCOMMERCE_CONSUMER_KEY
